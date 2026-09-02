@@ -1,0 +1,6 @@
+{
+  "name": "Jobless Empire Timeline Bot",
+  "description": "Production-grade canonical Proof-of-Work Timeline service and Discord bot for the Jobless Empire ecosystem.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
