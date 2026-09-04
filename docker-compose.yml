@@ -1,0 +1,52 @@
+services:
+  timeline-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jemp-timeline-bot
+    restart: unless-stopped
+    ports:
+      # Map host port 3001 to container port 3000 (avoiding collision with onboarding-bot on 3000)
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+
+      # Connects directly to the existing postgres container in the shared network
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-jemp_secret_password_2026}
+      DB_NAME: ${DB_NAME:-jobless_empire}
+      DB_SSL: "false"
+
+      # Discord Bot Credentials
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+
+      # Discord Channels & Roles
+      PROFILE_MANAGER_CHANNEL_ID: ${PROFILE_MANAGER_CHANNEL_ID}
+      TIMELINE_CHANNEL_ID: ${TIMELINE_CHANNEL_ID}
+      ADMIN_LOG_CHANNEL_ID: ${ADMIN_LOG_CHANNEL_ID}
+      ADMIN_ROLE_ID: ${ADMIN_ROLE_ID}
+
+      # Shared secret between Onboarding Bot and Timeline Bot
+      TIMELINE_SERVICE_SECRET: ${TIMELINE_SERVICE_SECRET:-jemp-timeline-shared-secret-key}
+
+      # Public Share Configuration
+      PUBLIC_SHARE_BASE_URL: ${PUBLIC_SHARE_BASE_URL:-http://localhost:3001/share}
+      SHARE_EXPIRY_HOURS: 24
+
+      # Security & Rate Limiting
+      RATE_LIMIT_WINDOW_SECONDS: 60
+      RATE_LIMIT_MAX_REQUESTS: 100
+    networks:
+      - jemp-shared
+
+networks:
+  jemp-shared:
+    # Connects to the network already running from your existing compose
+    external: true
+    name: jemp_shared_network
