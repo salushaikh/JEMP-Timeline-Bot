@@ -54,12 +54,19 @@ async function initPglite(): Promise<PGlite> {
 }
 
 export async function getDb() {
-  if (process.env.DATABASE_URL) {
+  const connectionString =
+    process.env.DATABASE_URL ||
+    (process.env.DB_HOST
+      ? `postgresql://${process.env.DB_USER || 'postgres'}:${encodeURIComponent(process.env.DB_PASSWORD || '')}@${process.env.DB_HOST}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'jobless_empire'}`
+      : undefined);
+
+  if (connectionString) {
     if (!pgPool) {
       pgPool = new Pool({
-        connectionString: process.env.DATABASE_URL,
+        connectionString,
         max: 10,
         connectionTimeoutMillis: 10000,
+        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
       });
       pgPool.on('error', (err) => {
         console.error('Unexpected error on idle PostgreSQL client', err);

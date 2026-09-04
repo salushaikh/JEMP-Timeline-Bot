@@ -1,0 +1,128 @@
+services:
+  # ================================================================
+  # 1. CANONICAL SHARED POSTGRESQL DATABASE FOR ALL JEMP BOTS
+  # ================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: jemp-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432" # Accessible on Windows host at localhost:5432 (for DBeaver/pgAdmin/other bots)
+    environment:
+      POSTGRES_DB: ${DB_NAME:-jobless_empire}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-jemp_secret_password_2026}
+    volumes:
+      # Persistent database volume on Windows Docker
+      - postgres_data:/var/lib/postgresql/data
+      # Auto-initializes schema on first boot with complete JEMP tables & indexes
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jobless_empire}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jemp-network
+
+  # ================================================================
+  # 2. JOBLESS EMPIRE ONBOARDING BOT & WEB DASHBOARD
+  # ================================================================
+  onboarding-bot:
+    build:
+      context: ../onboarding-bot # Path to onboarding bot codebase
+      dockerfile: Dockerfile
+    container_name: jemp-onboarding-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000" # Web Control Panel at http://localhost:3000
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Connects directly to the postgres container inside the Docker network
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-jemp_secret_password_2026}
+      DB_NAME: ${DB_NAME:-jobless_empire}
+      DB_SSL: "false"
+      # Discord Bot Credentials
+      DISCORD_TOKEN: ${ONBOARDING_DISCORD_TOKEN:-${DISCORD_TOKEN}}
+      DISCORD_CLIENT_ID: ${ONBOARDING_DISCORD_CLIENT_ID:-${DISCORD_CLIENT_ID}}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      ADMIN_ROLE_ID: ${ADMIN_ROLE_ID}
+      UNVERIFIED_ROLE_ID: ${UNVERIFIED_ROLE_ID}
+      VERIFIED_ROLE_ID: ${VERIFIED_ROLE_ID}
+      # Security & Timeline Ecosystem
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-jemp_master_key_default_32_bytes_len}
+      # Communication with Timeline Bot over shared Docker network
+      TIMELINE_SERVICE_URL: http://timeline-bot:3000/api/v1/timeline
+      TIMELINE_SERVICE_SECRET: ${TIMELINE_SERVICE_SECRET:-jemp-timeline-shared-secret-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      timeline-bot:
+        condition: service_started
+    networks:
+      - jemp-network
+
+  # ================================================================
+  # 3. JOBLESS EMPIRE TIMELINE BOT & PROOF-OF-WORK DOSSIER SERVICE
+  # ================================================================
+  timeline-bot:
+    build:
+      context: . # Current timeline bot directory with Dockerfile
+      dockerfile: Dockerfile
+    container_name: jemp-timeline-bot
+    restart: unless-stopped
+    ports:
+      # Port 3001 on host mapped to 3000 in container (since port 3000 is used by onboarding-bot)
+      - "3001:3000" # Access Timeline Bot Web Console at http://localhost:3001
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Connects to shared Postgres instance
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-jemp_secret_password_2026}
+      DB_NAME: ${DB_NAME:-jobless_empire}
+      DB_SSL: "false"
+      # Alternatively via full connection string:
+      # DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-jemp_secret_password_2026}@postgres:5432/${DB_NAME:-jobless_empire}
+      
+      # Discord Bot Credentials for Timeline Bot
+      DISCORD_TOKEN: ${TIMELINE_DISCORD_TOKEN:-${DISCORD_TOKEN}}
+      DISCORD_CLIENT_ID: ${TIMELINE_DISCORD_CLIENT_ID:-${DISCORD_CLIENT_ID}}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      
+      # Discord Channel Configuration
+      PROFILE_MANAGER_CHANNEL_ID: ${PROFILE_MANAGER_CHANNEL_ID}
+      TIMELINE_CHANNEL_ID: ${TIMELINE_CHANNEL_ID}
+      ADMIN_LOG_CHANNEL_ID: ${ADMIN_LOG_CHANNEL_ID}
+      ADMIN_ROLE_ID: ${ADMIN_ROLE_ID}
+      
+      # Ecosystem Shared Secret (must match onboarding-bot TIMELINE_SERVICE_SECRET)
+      TIMELINE_SERVICE_SECRET: ${TIMELINE_SERVICE_SECRET:-jemp-timeline-shared-secret-key}
+      
+      # Public Share Configuration
+      PUBLIC_SHARE_BASE_URL: ${PUBLIC_SHARE_BASE_URL:-https://despair.us/timeline/share}
+      SHARE_EXPIRY_HOURS: 24
+      
+      # Security & Rate Limiting
+      RATE_LIMIT_WINDOW_SECONDS: 60
+      RATE_LIMIT_MAX_REQUESTS: 100
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jemp-network
+
+volumes:
+  postgres_data:
+    name: jemp_postgres_data
+
+networks:
+  jemp-network:
+    name: jemp_shared_network
